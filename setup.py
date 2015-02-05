@@ -15,8 +15,9 @@ setup(
     description='JDBC API for Python3',
     classifiers= [
         'Intended Audience :: Developers',
-        'Programming Language:: Java',
-        'Programming Language:: Python',
-        'Programming Language:: Python:: 3',
+        'Programming Language :: Java',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3 :: Only',
     ]
 )
