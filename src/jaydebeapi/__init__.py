@@ -19,225 +19,9 @@
 # <http://www.gnu.org/licenses/>.
 
 import datetime
-import glob
-import os
 import time
-import re
-import sys
+from py4j import java_gateway
 
-_jdbc_connect = None
-
-_java_array_byte = None
-
-def _jdbc_connect_jython(jclassname, jars, libs, *args):
-    if _converters is None:
-        from java.sql import Types
-        types = Types
-        types_map = {}
-        const_re = re.compile('[A-Z][A-Z_]*$')
-        for i in dir(types):
-            if const_re.match(i):
-                types_map[i] = getattr(types, i)
-        _init_converters(types_map)
-    global _java_array_byte
-    if _java_array_byte is None:
-        import jarray
-        def _java_array_byte(data):
-            return jarray.array(data, 'b')
-    # register driver for DriverManager
-    jpackage = jclassname[:jclassname.rfind('.')]
-    dclassname = jclassname[jclassname.rfind('.') + 1:]
-    # print jpackage
-    # print dclassname
-    # print jpackage
-    from java.lang import Class
-    from java.lang import ClassNotFoundException
-    try:
-        Class.forName(jclassname).newInstance()
-    except ClassNotFoundException:
-        if not jars:
-            raise
-        _jython_set_classpath(jars)
-        Class.forName(jclassname).newInstance()
-    from java.sql import DriverManager
-    return DriverManager.getConnection(*args)
-
-def _jython_set_classpath(jars):
-    '''
-    import a jar at runtime (needed for JDBC [Class.forName])
-
-    adapted by Bastian Bowe from
-    http://stackoverflow.com/questions/3015059/jython-classpath-sys-path-and-jdbc-drivers
-    '''
-    from java.net import URL, URLClassLoader
-    from java.lang import ClassLoader
-    from java.io import File
-    m = URLClassLoader.getDeclaredMethod("addURL", [URL])
-    m.accessible = 1
-    urls = [File(i).toURL() for i in jars]
-    m.invoke(ClassLoader.getSystemClassLoader(), urls)
-
-def _prepare_jython():
-    global _jdbc_connect
-    _jdbc_connect = _jdbc_connect_jython
-
-def _jdbc_connect_jpype(jclassname, jars, libs, *driver_args):
-    import jpype
-    if not jpype.isJVMStarted():
-        args = []
-        class_path = []
-        if jars:
-            class_path.extend(jars)
-        class_path.extend(_get_classpath())
-        if class_path:
-            args.append('-Djava.class.path=%s' %
-                        os.path.pathsep.join(class_path))
-        if libs:
-            # path to shared libraries
-            libs_path = os.path.pathsep.join(libs)
-            args.append('-Djava.library.path=%s' % libs_path)
-        # jvm_path = ('/usr/lib/jvm/java-6-openjdk'
-        #             '/jre/lib/i386/client/libjvm.so')
-        jvm_path = jpype.getDefaultJVMPath()
-        jpype.startJVM(jvm_path, *args)
-    if not jpype.isThreadAttachedToJVM():
-        jpype.attachThreadToJVM()
-    if _converters is None:
-        types = jpype.java.sql.Types
-        types_map = {}
-        for i in types.__javaclass__.getClassFields():
-            types_map[i.getName()] = i.getStaticAttribute()
-        _init_converters(types_map)
-    global _java_array_byte
-    if _java_array_byte is None:
-        def _java_array_byte(data):
-            return jpype.JArray(jpype.JByte, 1)(data)
-    # register driver for DriverManager
-    jpype.JClass(jclassname)
-    return jpype.java.sql.DriverManager.getConnection(*driver_args)
-
-def _get_classpath():
-    """Extract CLASSPATH from system environment as JPype doesn't seem
-    to respect that variable.
-    """
-    try:
-        orig_cp = os.environ['CLASSPATH']
-    except KeyError:
-        return []
-    expanded_cp = []
-    for i in orig_cp.split(os.path.pathsep):
-        expanded_cp.extend(_jar_glob(i))
-    return expanded_cp
-
-def _jar_glob(item):
-    if item.endswith('*'):
-        return glob.glob('%s.[jJ][aA][rR]' % item)
-    else:
-        return [item]
-
-def _prepare_jpype():
-    global _jdbc_connect
-    _jdbc_connect = _jdbc_connect_jpype
-
-if sys.platform.lower().startswith('java'):
-    _prepare_jython()
-else:
-    _prepare_jpype()
-
-apilevel = '2.0'
-threadsafety = 1
-paramstyle = 'qmark'
-
-class DBAPITypeObject(object):
-    def __init__(self,*values):
-        self.values = values
-    def __cmp__(self,other):
-        if other in self.values:
-            return 0
-        if other < self.values:
-            return 1
-        else:
-            return -1
-
-STRING = DBAPITypeObject("CHARACTER", "CHAR", "VARCHAR",
-                          "CHARACTER VARYING", "CHAR VARYING", "STRING",)
-
-TEXT = DBAPITypeObject("CLOB", "CHARACTER LARGE OBJECT",
-                       "CHAR LARGE OBJECT",  "XML",)
-
-BINARY = DBAPITypeObject("BLOB", "BINARY LARGE OBJECT",)
-
-NUMBER = DBAPITypeObject("INTEGER", "INT", "SMALLINT", "BIGINT",)
-
-FLOAT = DBAPITypeObject("FLOAT", "REAL", "DOUBLE", "DECFLOAT")
-
-DECIMAL = DBAPITypeObject("DECIMAL", "DEC", "NUMERIC", "NUM",)
-
-DATE = DBAPITypeObject("DATE",)
-
-TIME = DBAPITypeObject("TIME",)
-
-DATETIME = DBAPITypeObject("TIMESTAMP",)
-
-ROWID = DBAPITypeObject(())
-
-# DB-API 2.0 Module Interface Exceptions
-class Error(Exception):
-    pass
-
-class Warning(Exception):
-    pass
-
-class InterfaceError(Error):
-    pass
-
-class DatabaseError(Error):
-    pass
-
-class InternalError(DatabaseError):
-    pass
-
-class OperationalError(DatabaseError):
-    pass
-
-class ProgrammingError(DatabaseError):
-    pass
-
-class IntegrityError(DatabaseError):
-    pass
-
-class DataError(DatabaseError):
-    pass
-
-class NotSupportedError(DatabaseError):
-    pass
-
-# DB-API 2.0 Type Objects and Constructors
-
-def _java_sql_blob(data):
-    return _java_array_byte(data)
-
-Binary = _java_sql_blob
-
-def _str_func(func):
-    def to_str(*parms):
-        return str(func(*parms))
-    return to_str
-
-Date = _str_func(datetime.date)
-
-Time = _str_func(datetime.time)
-
-Timestamp = _str_func(datetime.datetime)
-
-def DateFromTicks(ticks):
-    return Date(*time.localtime(ticks)[:3])
-
-def TimeFromTicks(ticks):
-    return Time(*time.localtime(ticks)[3:6])
-
-def TimestampFromTicks(ticks):
-    return Timestamp(*time.localtime(ticks)[:6])
 
 # DB-API 2.0 Module Interface connect constructor
 def connect(jclassname, driver_args, jars=None, libs=None):
@@ -254,26 +38,36 @@ def connect(jclassname, driver_args, jars=None, libs=None):
     libs: Dll/so filenames or sequence of dlls/sos used as shared
           library by the JDBC driver
     """
-    if isinstance(driver_args, str):
-        driver_args = [ driver_args ]
-    if jars:
-        if isinstance(jars, str):
-            jars = [ jars ]
-    else:
-        jars = []
-    if libs:
-        if isinstance(libs, str):
-            libs = [ libs ]
-    else:
-        libs = []
-    jconn = _jdbc_connect(jclassname, jars, libs, *driver_args)
-    return Connection(jconn, _converters)
 
-# DB-API 2.0 Connection Object
-class Connection(object):
+    try: # Attach to gateway
+        gateway = java_gateway.JavaGateway(eager_load=True)
 
-    jconn = None
+    except: # Load new gateway
+        driver_args = [ driver_args ] if isinstance(driver_args, str) else driver_args
+        classpath = ':'.join(jars) if jars else None
 
+        if libs:
+            javaopts = [libs] if isinstance(libs, str) else libs
+        else:
+            javaopts = []
+
+        gateway = java_gateway.JavaGateway.launch_gateway(
+            port=25333,classpath=classpath, javaopts=javaopts)
+
+        java_gateway.java_import(gateway.jvm,'java.sql.DriverManager')
+        gateway.jvm.Class.forName(jclassname)
+
+    connection = gateway.jvm.DriverManager.getConnection(*driver_args)
+    if _converters is None:
+        types_map = {}
+        for type in gateway.jvm.Class.forName("java.sql.Types").getFields():
+            types_map[type.getName()] = type.getInt(None)
+        _init_converters(types_map)
+
+
+    return Connection(connection, _converters)
+
+class Connection:
     def __init__(self, jconn, converters):
         self.jconn = jconn
         self._converters = converters
@@ -290,9 +84,18 @@ class Connection(object):
     def cursor(self):
         return Cursor(self, self._converters)
 
-# DB-API 2.0 Cursor Object
-class Cursor(object):
+class DBAPITypeObject:
+    def __init__(self,*values):
+        self.values = values
+    def __cmp__(self,other):
+        if other in self.values:
+            return 0
+        if other < self.values:
+            return 1
+        else:
+            return -1
 
+class Cursor:
     rowcount = -1
     _meta = None
     _prep = None
@@ -434,6 +237,80 @@ class Cursor(object):
     def setoutputsize(self, size, column=None):
         pass
 
+
+
+apilevel = '2.0'
+threadsafety = 1
+paramstyle = 'qmark'
+
+STRING = DBAPITypeObject("CHARACTER", "CHAR", "VARCHAR", "CHARACTER VARYING", "CHAR VARYING", "STRING")
+TEXT = DBAPITypeObject("CLOB", "CHARACTER LARGE OBJECT", "CHAR LARGE OBJECT",  "XML")
+BINARY = DBAPITypeObject("BLOB", "BINARY LARGE OBJECT")
+NUMBER = DBAPITypeObject("INTEGER", "INT", "SMALLINT", "BIGINT")
+FLOAT = DBAPITypeObject("FLOAT", "REAL", "DOUBLE", "DECFLOAT")
+DECIMAL = DBAPITypeObject("DECIMAL", "DEC", "NUMERIC", "NUM")
+DATE = DBAPITypeObject("DATE",)
+TIME = DBAPITypeObject("TIME",)
+DATETIME = DBAPITypeObject("TIMESTAMP",)
+ROWID = DBAPITypeObject(())
+
+# DB-API 2.0 Module Interface Exceptions
+class Error(Exception):
+    pass
+
+class Warning(Exception):
+    pass
+
+class InterfaceError(Error):
+    pass
+
+class DatabaseError(Error):
+    pass
+
+class InternalError(DatabaseError):
+    pass
+
+class OperationalError(DatabaseError):
+    pass
+
+class ProgrammingError(DatabaseError):
+    pass
+
+class IntegrityError(DatabaseError):
+    pass
+
+class DataError(DatabaseError):
+    pass
+
+class NotSupportedError(DatabaseError):
+    pass
+
+# DB-API 2.0 Type Objects and Constructors
+
+# def _java_sql_blob(data):
+#     return jpype.JArray(jpype.JByte, 1)(data)
+#
+# Binary = _java_sql_blob
+
+def _str_func(func):
+    def to_str(*parms):
+        return str(func(*parms))
+    return to_str
+
+Date = _str_func(datetime.date)
+Time = _str_func(datetime.time)
+Timestamp = _str_func(datetime.datetime)
+
+def DateFromTicks(ticks):
+    return Date(*time.localtime(ticks)[:3])
+
+def TimeFromTicks(ticks):
+    return Time(*time.localtime(ticks)[3:6])
+
+def TimestampFromTicks(ticks):
+    return Timestamp(*time.localtime(ticks)[:6])
+
+
 def _to_datetime(java_val):
     d = datetime.datetime.strptime(str(java_val)[:19], "%Y-%m-%d %H:%M:%S")
     if not isinstance(java_val, str):
@@ -445,17 +322,6 @@ def _to_date(java_val):
     d = datetime.datetime.strptime(str(java_val)[:10], "%Y-%m-%d")
     return d.strftime("%Y-%m-%d")
     # return str(java_val)
-
-def _java_to_py(java_method):
-    def to_py(java_val):
-        if isinstance(java_val, (str, int, float, bool)):
-            return java_val
-        return getattr(java_val, java_method)()
-    return to_py
-
-_to_double = _java_to_py('doubleValue')
-
-_to_int = _java_to_py('intValue')
 
 def _init_converters(types_map):
     """Prepares the converters for conversion of java types to python
@@ -472,17 +338,14 @@ def _init_converters(types_map):
 _converters = None
 
 _DEFAULT_CONVERTERS = {
-    # see
-    # http://download.oracle.com/javase/1.4.2/docs/api/java/sql/Types.html
-    # for possible keys
     'TIMESTAMP': _to_datetime,
     'DATE': _to_date,
     'BINARY': str,
-    'DECIMAL': _to_double,
-    'NUMERIC': _to_double,
-    'DOUBLE': _to_double,
-    'FLOAT': _to_double,
-    'INTEGER': _to_int,
-    'SMALLINT': _to_int,
-    'BOOLEAN': _java_to_py('booleanValue'),
+    'DECIMAL': float,
+    'NUMERIC': float,
+    'DOUBLE': float,
+    'FLOAT': float,
+    'INTEGER': int,
+    'SMALLINT': int,
+    'BOOLEAN': bool,
 }

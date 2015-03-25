@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='JayDeBeApi3',
-    version='1',
+    version='1.1',
     packages=['jaydebeapi'],
     package_dir={'': 'src'},
     url='https://github.com/nutztherookie/JayDeBeApi3',
@@ -10,7 +10,7 @@ setup(
     author='Andreas Nüßlein',
     author_email='andreas.nuesslein@amnesty.de',
     install_requires=[
-      'JPype1-py3 >= 0.5.5.2',
+      'py4j',
     ],
     description='JDBC API for Python3',
     classifiers= [
