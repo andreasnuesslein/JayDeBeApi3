@@ -22,6 +22,10 @@ import datetime
 import time
 from py4j import java_gateway
 
+def _gateway_is_running():
+    gwconn = java_gateway.GatewayConnection()
+    res = gwconn.socket.connect_ex((gwconn.address,gwconn.port))
+    return True if res == 0 else False
 
 # DB-API 2.0 Module Interface connect constructor
 def connect(jclassname, driver_args, jars=None, libs=None):
@@ -39,10 +43,9 @@ def connect(jclassname, driver_args, jars=None, libs=None):
           library by the JDBC driver
     """
 
-    try: # Attach to gateway
-        gateway = java_gateway.JavaGateway(eager_load=True)
-
-    except: # Load new gateway
+    if _gateway_is_running():
+        gateway = java_gateway.JavaGateway()
+    else:
         driver_args = [ driver_args ] if isinstance(driver_args, str) else driver_args
         classpath = ':'.join(jars) if jars else None
 
