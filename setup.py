@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='JayDeBeApi3',
-    version='1.1',
+    version='1.3',
     packages=['jaydebeapi'],
     package_dir={'': 'src'},
     url='https://github.com/nutztherookie/JayDeBeApi3',

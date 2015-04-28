@@ -1,5 +1,3 @@
-#-*- coding: utf-8 -*-
-
 # Copyright 2010, 2011, 2012, 2013 Bastian Bowe
 # 2015 Andreas Nüßlein
 #
@@ -22,10 +20,12 @@ import datetime
 import time
 from py4j import java_gateway
 
+
 def _gateway_is_running():
     gwconn = java_gateway.GatewayConnection()
-    res = gwconn.socket.connect_ex((gwconn.address,gwconn.port))
+    res = gwconn.socket.connect_ex((gwconn.address, gwconn.port))
     return True if res == 0 else False
+
 
 # DB-API 2.0 Module Interface connect constructor
 def connect(jclassname, driver_args, jars=None, libs=None):
@@ -46,18 +46,22 @@ def connect(jclassname, driver_args, jars=None, libs=None):
     if _gateway_is_running():
         gateway = java_gateway.JavaGateway()
     else:
-        driver_args = [ driver_args ] if isinstance(driver_args, str) else driver_args
-        classpath = ':'.join(jars) if jars else None
+        driver_args = [driver_args] if isinstance(driver_args, str) else driver_args
+
+        if jars:
+            classpath = ':'.join(jars) if isinstance(jars, list) else jars
+        else:
+            classpath = None
 
         if libs:
-            javaopts = [libs] if isinstance(libs, str) else libs
+            javaopts = libs if isinstance(libs, list) else [libs]
         else:
             javaopts = []
 
         gateway = java_gateway.JavaGateway.launch_gateway(
-            port=25333,classpath=classpath, javaopts=javaopts)
+            port=25333, classpath=classpath, javaopts=javaopts)
 
-        java_gateway.java_import(gateway.jvm,'java.sql.DriverManager')
+        java_gateway.java_import(gateway.jvm, 'java.sql.DriverManager')
         gateway.jvm.Class.forName(jclassname)
 
     connection = gateway.jvm.DriverManager.getConnection(*driver_args)
@@ -67,8 +71,8 @@ def connect(jclassname, driver_args, jars=None, libs=None):
             types_map[type.getName()] = type.getInt(None)
         _init_converters(types_map)
 
-
     return Connection(connection, _converters)
+
 
 class Connection:
     def __init__(self, jconn, converters):
@@ -87,16 +91,19 @@ class Connection:
     def cursor(self):
         return Cursor(self, self._converters)
 
+
 class DBAPITypeObject:
-    def __init__(self,*values):
+    def __init__(self, *values):
         self.values = values
-    def __cmp__(self,other):
+
+    def __cmp__(self, other):
         if other in self.values:
             return 0
         if other < self.values:
             return 1
         else:
             return -1
+
 
 class Cursor:
     rowcount = -1
@@ -130,7 +137,7 @@ class Cursor:
                 self._description.append(col_desc)
             return self._description
 
-#   optional callproc(self, procname, *parameters) unsupported
+        #   optional callproc(self, procname, *parameters) unsupported
 
     def close(self):
         self._close_last()
@@ -170,7 +177,7 @@ class Cursor:
             self.rowcount = -1
         else:
             self.rowcount = self._prep.getUpdateCount()
-        # self._prep.getWarnings() ???
+            # self._prep.getWarnings() ???
 
     def executemany(self, operation, seq_of_parameters):
         self._close_last()
@@ -241,52 +248,61 @@ class Cursor:
         pass
 
 
-
 apilevel = '2.0'
 threadsafety = 1
 paramstyle = 'qmark'
 
 STRING = DBAPITypeObject("CHARACTER", "CHAR", "VARCHAR", "CHARACTER VARYING", "CHAR VARYING", "STRING")
-TEXT = DBAPITypeObject("CLOB", "CHARACTER LARGE OBJECT", "CHAR LARGE OBJECT",  "XML")
+TEXT = DBAPITypeObject("CLOB", "CHARACTER LARGE OBJECT", "CHAR LARGE OBJECT", "XML")
 BINARY = DBAPITypeObject("BLOB", "BINARY LARGE OBJECT")
 NUMBER = DBAPITypeObject("INTEGER", "INT", "SMALLINT", "BIGINT")
 FLOAT = DBAPITypeObject("FLOAT", "REAL", "DOUBLE", "DECFLOAT")
 DECIMAL = DBAPITypeObject("DECIMAL", "DEC", "NUMERIC", "NUM")
-DATE = DBAPITypeObject("DATE",)
-TIME = DBAPITypeObject("TIME",)
-DATETIME = DBAPITypeObject("TIMESTAMP",)
+DATE = DBAPITypeObject("DATE", )
+TIME = DBAPITypeObject("TIME", )
+DATETIME = DBAPITypeObject("TIMESTAMP", )
 ROWID = DBAPITypeObject(())
 
 # DB-API 2.0 Module Interface Exceptions
 class Error(Exception):
     pass
 
+
 class Warning(Exception):
     pass
+
 
 class InterfaceError(Error):
     pass
 
+
 class DatabaseError(Error):
     pass
+
 
 class InternalError(DatabaseError):
     pass
 
+
 class OperationalError(DatabaseError):
     pass
+
 
 class ProgrammingError(DatabaseError):
     pass
 
+
 class IntegrityError(DatabaseError):
     pass
+
 
 class DataError(DatabaseError):
     pass
 
+
 class NotSupportedError(DatabaseError):
     pass
+
 
 # DB-API 2.0 Type Objects and Constructors
 
@@ -298,17 +314,22 @@ class NotSupportedError(DatabaseError):
 def _str_func(func):
     def to_str(*parms):
         return str(func(*parms))
+
     return to_str
+
 
 Date = _str_func(datetime.date)
 Time = _str_func(datetime.time)
 Timestamp = _str_func(datetime.datetime)
 
+
 def DateFromTicks(ticks):
     return Date(*time.localtime(ticks)[:3])
 
+
 def TimeFromTicks(ticks):
     return Time(*time.localtime(ticks)[3:6])
+
 
 def TimestampFromTicks(ticks):
     return Timestamp(*time.localtime(ticks)[:6])
@@ -321,10 +342,12 @@ def _to_datetime(java_val):
     return str(d)
     # return str(java_val)
 
+
 def _to_date(java_val):
     d = datetime.datetime.strptime(str(java_val)[:10], "%Y-%m-%d")
     return d.strftime("%Y-%m-%d")
     # return str(java_val)
+
 
 def _init_converters(types_map):
     """Prepares the converters for conversion of java types to python
