@@ -18,6 +18,7 @@
 
 import datetime
 import time
+import os
 from py4j import java_gateway
 
 
@@ -49,7 +50,7 @@ def connect(jclassname, driver_args, jars=None, libs=None):
         driver_args = [driver_args] if isinstance(driver_args, str) else driver_args
 
         if jars:
-            classpath = ':'.join(jars) if isinstance(jars, list) else jars
+            classpath = os.pathsep.join(jars) if isinstance(jars, list) else jars
         else:
             classpath = None
 
@@ -59,7 +60,7 @@ def connect(jclassname, driver_args, jars=None, libs=None):
             javaopts = []
 
         gateway = java_gateway.JavaGateway.launch_gateway(
-            port=25333, classpath=classpath, javaopts=javaopts)
+            port=25333, classpath=classpath, javaopts=javaopts, die_on_exit=True)
 
         java_gateway.java_import(gateway.jvm, 'java.sql.DriverManager')
         gateway.jvm.Class.forName(jclassname)
