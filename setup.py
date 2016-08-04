@@ -10,7 +10,7 @@ setup(
     author='Andreas Nüßlein',
     author_email='andreas.nuesslein@amnesty.de',
     install_requires=[
-      'py4j',
+      'py4j<0.10',
     ],
     description='JDBC API for Python3',
     classifiers= [
