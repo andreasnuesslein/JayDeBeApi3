@@ -23,7 +23,7 @@ from py4j import java_gateway
 
 
 def _gateway_is_running():
-    gwconn = java_gateway.GatewayConnection()
+    gwconn = java_gateway.GatewayConnection(gateway_parameters=java_gateway.GatewayParameters(address="127.0.0.1", port=25333))
     res = gwconn.socket.connect_ex((gwconn.address, gwconn.port))
     return True if res == 0 else False
 
